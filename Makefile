@@ -27,7 +27,7 @@ build/uxn: $(COMMON) src/main.c | build
 	$(CC) $(CFLAGS) $(COMMON) src/main.c -o $@ $(LDFLAGS)
 
 build/test_uxn: $(COMMON) tests/test_main.c | build
-	$(CC) $(CFLAGS) $(COMMON) tests/test_main.c -o $@ $(LDFLAGS)
+	$(CC) $(CFLAGS) $(COMMON) tests/test_main.c -o $@
 
 test: build/test_uxn
 	./build/test_uxn
