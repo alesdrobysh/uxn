@@ -3,7 +3,15 @@
 #include <stdio.h>
 #include "execute.h"
 
-int main(void) {
+void debug_array(const uint8_t* arr, size_t length) {
+    for (size_t i = 0; i < length; i++) {
+        printf("%0X " , arr[i]);
+    }
+
+    printf("\n");
+}
+
+int test_vm_structure(void) {
     Uxn *vm = uxn_create();
 
     if (vm == NULL) {
@@ -73,16 +81,17 @@ int main(void) {
     assert(stack_pop16(&vm->ret) == 0xABCD);
 
     uxn_destroy(vm);
+    vm = NULL;
 
-    vm = uxn_create();
+    return 0;
+}
 
-    vm->ram[0x0100] = 0x80;
-    vm->ram[0x0101] = 0x2A;
-    vm->ram[0x0102] = 0xA0;
-    vm->ram[0x0103] = 0x12;
-    vm->ram[0x0104] = 0x34;
-    vm->ram[0x0105] = 0x00;
-    
+int test_run_lit_lit2(void) {
+    Uxn *vm = uxn_create();
+
+    uint8_t program[] = {0x80, 0x2A, 0xA0, 0x12, 0x34, 0x00};
+    copy_bytes(&vm->ram[0x0100], program, 6);
+
     uxn_run(vm, 5);
 
     assert(vm->working.data[0] == 0x2A);
@@ -91,7 +100,102 @@ int main(void) {
     assert(vm->working.pointer == 3);
 
     uxn_destroy(vm);
+    vm = NULL;
 
+    return 0;
+}
+
+int test_run_jmi(void) {
+    // forward
+
+    Uxn *vm = uxn_create();
+
+    uint8_t program[] = {0x40, 0x00, 0x03, 0x80, 0x11, 0x00, 0x80, 0x22, 0x00};
+    copy_bytes(&vm->ram[0x0100], program, 9);
+    
+    uxn_run(vm, 10);
+
+    assert(vm->working.data[0] == 0x22);
+    assert(vm->working.pointer == 1);
+    assert(vm->pc == 0x0109);
+
+    uxn_destroy(vm);
+    vm = NULL;
+
+    // backwards
+
+    vm = uxn_create();
+
+    uint8_t program2[] = {0x40, 0xFF, 0xFD};
+    copy_bytes(&vm->ram[0x0100], program2, 3);
+    
+    UxnRunResult result = uxn_run(vm, 4);
+
+    assert(result == UXN_RUN_STEP_LIMIT);
+    assert(vm->pc == 0x0100);
+
+    uxn_destroy(vm);
+    vm = NULL;
+
+    return 0;
+}
+
+int test_run_jci(void) {
+    // condition is 1
+    
+    Uxn *vm = uxn_create();
+
+    uint8_t program[] = {0x80, 0x01, 0x20, 0x00, 0x03, 0x80, 0x11, 0x00, 0x80, 0x22, 0x00};
+    copy_bytes(&vm->ram[0x0100], program, 11);
+    
+    uxn_run(vm, 11);
+
+    assert(vm->working.data[0] == 0x22);
+    assert(vm->working.pointer == 1);
+    assert(vm->pc == 0x10B);
+
+    uxn_destroy(vm);
+    vm = NULL;
+
+    // condition is 0
+
+    vm = uxn_create();
+
+    program[1] = 0x00;
+    copy_bytes(&vm->ram[0x0100], program, 11);
+    
+    uxn_run(vm, 11);
+
+    assert(vm->working.data[0] == 0x11);
+    assert(vm->working.pointer == 1);
+    assert(vm->pc == 0x108);
+
+    uxn_destroy(vm);
+    vm = NULL;
+
+    return 0;
+}
+
+int test_run_jsi(void) {
+    Uxn *vm = uxn_create();
+
+    uint8_t program[] = {0x60, 0x00, 0x03, 0x80, 0x11, 0x00, 0x80, 0x2A, 0x00};
+    copy_bytes(&vm->ram[0x0100], program, 9);
+    
+    uxn_run(vm, 9);
+
+    assert(vm->working.data[0] == 0x2A);
+    assert(vm->ret.data[0] == 0x01);
+    assert(vm->ret.data[1] == 0x03);
+    assert(vm->pc == 0x0109);
+
+    uxn_destroy(vm);
+    vm = NULL;
+
+    return 0;
+}
+
+int test_decode_opcode(void) {
     DecodedOpcode op;
 
     op = decode_opcode(0x01);
@@ -140,7 +244,18 @@ int main(void) {
     assert(opcode_name(0x00) == NULL);
     assert(opcode_name(0x20) == NULL);
 
+    return 0;
+}
+
+int main(void) {
+    int result = test_vm_structure() || 
+        test_run_lit_lit2() || 
+        test_run_jmi() ||
+        test_run_jci() ||
+        test_run_jsi() ||
+        test_decode_opcode();
+
     puts("All tests passed!");
 
-    return 0;
+    return result;
 }
