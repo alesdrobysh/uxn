@@ -1,5 +1,6 @@
 #include "opcode.h"
 #include <stdlib.h>
+#include <stdio.h>
 
 const char *opcode_name(uint8_t base) {
     if (base < 0x01 || base > 0x1F) return NULL;
@@ -18,6 +19,22 @@ const char *opcode_name(uint8_t base) {
 
     return names[base];
 
+}
+
+const char *format_opcode_kind(OpcodeKind kind) {
+    char* names[] = {
+        "OP_STANDARD",
+        "OP_BRK",
+        "OP_JCI",
+        "OP_JMI",
+        "OP_JSI",
+        "OP_LIT",
+        "OP_LIT2",
+        "OP_LITR",
+        "OP_LIT2R"
+    };
+
+    return names[kind];
 }
 
 DecodedOpcode decode_opcode(uint8_t raw) {
@@ -49,3 +66,24 @@ DecodedOpcode decode_opcode(uint8_t raw) {
 
     return opcode;
 }
+
+void debug_opcode(DecodedOpcode op) {
+    printf("%s ", format_opcode_kind(op.kind));
+    
+    if (op.short_mode) {
+        printf("short ");
+    }
+
+    if (op.return_mode) {
+        printf("return ");
+    }
+
+    if (op.keep_mode) {
+        printf("keep ");
+    }
+
+    if (op.kind == OP_STANDARD) {
+        printf("%s ", opcode_name(op.base));
+    }
+}
+

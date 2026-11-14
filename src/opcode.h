@@ -25,6 +25,8 @@ typedef struct {
 } DecodedOpcode;
 
 const char *opcode_name(uint8_t base);
+const char *format_opcode_kind(OpcodeKind kind);
 DecodedOpcode decode_opcode(uint8_t raw);
+void debug_opcode(DecodedOpcode op);
 
 #endif

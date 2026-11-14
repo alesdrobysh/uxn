@@ -3,6 +3,16 @@
 #include <stdio.h>
 #include "execute.h"
 
+typedef struct {
+    const char *name;
+    uint8_t opcode;
+    bool return_mode;
+    uint8_t before[4];
+    size_t before_len;
+    uint8_t after[6];
+    size_t after_len;
+} UxnInstructionCase;
+
 void debug_array(const uint8_t* arr, size_t length) {
     for (size_t i = 0; i < length; i++) {
         printf("%0X " , arr[i]);
@@ -195,6 +205,71 @@ int test_run_jsi(void) {
     return 0;
 }
 
+int test_inc_add_modes(void) {
+    static const UxnInstructionCase cases[] = {
+        /* INC: normal, 2, r, 2r, k, 2k, rk, 2rk */
+        {"INC",     0x01, false, {0x2A},                 1, {0x2B},                         1},
+        {"INC2",    0x21, false, {0x12, 0xFF},           2, {0x13, 0x00},                   2},
+        {"INCr",    0x41, true,  {0x2A},                 1, {0x2B},                         1},
+        {"INC2r",   0x61, true,  {0x12, 0xFF},           2, {0x13, 0x00},                   2},
+        {"INCk",    0x81, false, {0x2A},                 1, {0x2A, 0x2B},                   2},
+        {"INC2k",   0xA1, false, {0x12, 0xFF},           2, {0x12, 0xFF, 0x13, 0x00},       4},
+        {"INCrk",   0xC1, true,  {0x2A},                 1, {0x2A, 0x2B},                   2},
+        {"INC2rk",  0xE1, true,  {0x12, 0xFF},           2, {0x12, 0xFF, 0x13, 0x00},       4},
+
+        /* ADD: normal, 2, r, 2r, k, 2k, rk, 2rk */
+        {"ADD",     0x18, false, {0x07, 0x05},           2, {0x0C},                         1},
+        {"ADD2",    0x38, false, {0x12, 0x34, 0x00, 0x02}, 4, {0x12, 0x36},                 2},
+        {"ADDr",    0x58, true,  {0x07, 0x05},           2, {0x0C},                         1},
+        {"ADD2r",   0x78, true,  {0x12, 0x34, 0x00, 0x02}, 4, {0x12, 0x36},                 2},
+        {"ADDk",    0x98, false, {0x07, 0x05},           2, {0x07, 0x05, 0x0C},             3},
+        {"ADD2k",   0xB8, false, {0x12, 0x34, 0x00, 0x02}, 4, {0x12, 0x34, 0x00, 0x02, 0x12, 0x36}, 6},
+        {"ADDrk",   0xD8, true,  {0x07, 0x05},           2, {0x07, 0x05, 0x0C},             3},
+        {"ADD2rk",  0xF8, true,  {0x12, 0x34, 0x00, 0x02}, 4, {0x12, 0x34, 0x00, 0x02, 0x12, 0x36}, 6},
+
+        /* Explicit 8/16-bit overflow tests */
+        {"INC overflow",  0x01, false, {0xFF},                1, {0x00}, 1},
+        {"INC2 overflow", 0x21, false, {0xFF, 0xFF},          2, {0x00, 0x00}, 2},
+        {"ADD overflow",  0x18, false, {0xFF, 0x01},          2, {0x00}, 1},
+        {"ADD2 overflow", 0x38, false, {0xFF, 0xFF, 0x00, 0x01}, 4, {0x00, 0x00}, 2},
+    };
+
+    for (size_t i = 0; i < sizeof cases / sizeof cases[0]; i++) {
+        const UxnInstructionCase *tc = &cases[i];
+        Uxn *vm = uxn_create();
+        assert(vm != NULL);
+
+        UxnStack *target = tc->return_mode ? &vm->ret : &vm->working;
+        UxnStack *other = tc->return_mode ? &vm->working : &vm->ret;
+
+        /* Check the other stack is left untouched. */
+        stack_push8(other, 0x99);
+        for (size_t j = 0; j < tc->before_len; j++) {
+            stack_push8(target, tc->before[j]);
+        }
+
+        vm->ram[0x0100] = tc->opcode;
+        vm->ram[0x0101] = 0x00; /* BRK */
+        UxnRunResult result = uxn_run(vm, 2);
+
+        if (result != UXN_RUN_BRK ||
+            vm->pc != 0x0102 ||
+            (size_t)target->pointer != tc->after_len ||
+            other->pointer != 1 ||
+            other->data[0] != 0x99 ||
+            memcmp(target->data, tc->after, tc->after_len) != 0) {
+            fprintf(stderr, "FAIL %s: result=%d, pc=0x%04X, stack pointer=%u\n",
+                    tc->name, (int)result,
+                    (unsigned)vm->pc, (unsigned)target->pointer);
+            abort();
+        }
+
+        uxn_destroy(vm);
+    }
+
+    return 0;
+}
+
 int test_decode_opcode(void) {
     DecodedOpcode op;
 
@@ -248,11 +323,13 @@ int test_decode_opcode(void) {
 }
 
 int main(void) {
-    int result = test_vm_structure() || 
+    int result = 
+        test_vm_structure() || 
         test_run_lit_lit2() || 
         test_run_jmi() ||
         test_run_jci() ||
         test_run_jsi() ||
+        test_inc_add_modes() ||
         test_decode_opcode();
 
     puts("All tests passed!");
