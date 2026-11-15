@@ -20,7 +20,9 @@ TESTS = tests/test_main.c \
         tests/test_vm.c \
         tests/test_program_execution.c \
         tests/test_arithmetic.c \
-        tests/test_opcode.c
+        tests/test_opcode.c \
+        tests/test_memory.c \
+        tests/test_vm_opcodes.c
 
 .PHONY: all test clean
 

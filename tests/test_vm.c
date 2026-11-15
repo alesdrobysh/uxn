@@ -69,6 +69,7 @@ int test_vm_structure(void) {
     assert(vm->ret.data[0] == 0xCD);
     assert(vm->ret.pointer == 1);
     assert(stack_pop16(&vm->ret) == 0xABCD);
+    assert(vm->ret.pointer == 255);
 
     uxn_destroy(vm);
     vm = NULL;
