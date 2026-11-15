@@ -95,6 +95,174 @@ UxnRunResult uxn_run(Uxn *vm, size_t max_steps) {
 
                     stack_push8(stack, result);
                 }
+            } else if (op.base == 0x19) { // SUB
+                if (op.short_mode) {
+                    uint16_t b = stack_pop16(stack);
+                    uint16_t a = stack_pop16(stack);
+
+                    if (op.keep_mode) {
+                        stack->pointer = saved_pointer;
+                    }
+
+                    uint16_t result = a - b;
+
+                    stack_push16(stack, result);
+                } else {
+                    uint8_t b = stack_pop8(stack);
+                    uint8_t a = stack_pop8(stack);
+
+                    if (op.keep_mode) {
+                        stack->pointer = saved_pointer;
+                    }
+
+                    uint8_t result = a - b;
+
+                    stack_push8(stack, result);
+                }
+            } else if (op.base == 0x1A) { // MUL
+                if (op.short_mode) {
+                    uint16_t b = stack_pop16(stack);
+                    uint16_t a = stack_pop16(stack);
+
+                    if (op.keep_mode) {
+                        stack->pointer = saved_pointer;
+                    }
+
+                    uint16_t result = (uint16_t)((uint32_t)a * b);
+
+                    stack_push16(stack, result);
+                } else {
+                    uint8_t b = stack_pop8(stack);
+                    uint8_t a = stack_pop8(stack);
+
+                    if (op.keep_mode) {
+                        stack->pointer = saved_pointer;
+                    }
+
+                    uint8_t result = (uint8_t)((uint32_t)a * b);
+
+                    stack_push8(stack, result);
+                }
+            } else if (op.base == 0x1B) { // DIV
+                if (op.short_mode) {
+                    uint16_t b = stack_pop16(stack);
+                    uint16_t a = stack_pop16(stack);
+
+                    if (op.keep_mode) {
+                        stack->pointer = saved_pointer;
+                    }
+
+                    uint16_t result = b == 0 ? 0 : a / b;
+
+                    stack_push16(stack, result);
+                } else {
+                    uint8_t b = stack_pop8(stack);
+                    uint8_t a = stack_pop8(stack);
+
+                    if (op.keep_mode) {
+                        stack->pointer = saved_pointer;
+                    }
+
+                    uint8_t result = b == 0 ? 0 : a / b;
+
+                    stack_push8(stack, result);
+                }
+            } else if (op.base == 0x1C) { // AND
+                if (op.short_mode) {
+                    uint16_t b = stack_pop16(stack);
+                    uint16_t a = stack_pop16(stack);
+
+                    if (op.keep_mode) {
+                        stack->pointer = saved_pointer;
+                    }
+
+                    uint16_t result = a & b;
+
+                    stack_push16(stack, result);
+                } else {
+                    uint8_t b = stack_pop8(stack);
+                    uint8_t a = stack_pop8(stack);
+
+                    if (op.keep_mode) {
+                        stack->pointer = saved_pointer;
+                    }
+
+                    uint8_t result = a & b;
+
+                    stack_push8(stack, result);
+                }
+            } else if (op.base == 0x1D) { // ORA
+                if (op.short_mode) {
+                    uint16_t b = stack_pop16(stack);
+                    uint16_t a = stack_pop16(stack);
+
+                    if (op.keep_mode) {
+                        stack->pointer = saved_pointer;
+                    }
+
+                    uint16_t result = a | b;
+
+                    stack_push16(stack, result);
+                } else {
+                    uint8_t b = stack_pop8(stack);
+                    uint8_t a = stack_pop8(stack);
+
+                    if (op.keep_mode) {
+                        stack->pointer = saved_pointer;
+                    }
+
+                    uint8_t result = a | b;
+
+                    stack_push8(stack, result);
+                }
+            } else if (op.base == 0x1E) { // EOR
+                if (op.short_mode) {
+                    uint16_t b = stack_pop16(stack);
+                    uint16_t a = stack_pop16(stack);
+
+                    if (op.keep_mode) {
+                        stack->pointer = saved_pointer;
+                    }
+
+                    uint16_t result = a ^ b;
+
+                    stack_push16(stack, result);
+                } else {
+                    uint8_t b = stack_pop8(stack);
+                    uint8_t a = stack_pop8(stack);
+
+                    if (op.keep_mode) {
+                        stack->pointer = saved_pointer;
+                    }
+
+                    uint8_t result = a ^ b;
+
+                    stack_push8(stack, result);
+                }
+            } else if (op.base == 0x1F) { // SFT
+                uint8_t control = stack_pop8(stack);
+                uint8_t high_nibble = control >> 4;
+                uint8_t low_nibble = control & 0x0F;
+
+                if (op.short_mode) {
+                    uint16_t value = stack_pop16(stack);
+
+                    if (op.keep_mode) {
+                        stack->pointer = saved_pointer;
+                    }
+
+                    uint16_t result = (uint16_t)((value >> low_nibble) << high_nibble);
+                    stack_push16(stack, result);
+                } else {
+                    uint8_t value = stack_pop8(stack);
+
+                    if (op.keep_mode) {
+                        stack->pointer = saved_pointer;
+                    }
+
+                    uint8_t result = (uint8_t)((value >> low_nibble) << high_nibble);
+                    stack_push8(stack, result);
+                }
             } else {
                 vm->pc--;
                 return UXN_RUN_UNSUPPORTED;

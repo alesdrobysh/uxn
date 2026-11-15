@@ -16,6 +16,12 @@ COMMON = src/stack.c \
          src/uxn.c \
          src/execute.c
 
+TESTS = tests/test_main.c \
+        tests/test_vm.c \
+        tests/test_program_execution.c \
+        tests/test_arithmetic.c \
+        tests/test_opcode.c
+
 .PHONY: all test clean
 
 all: build/uxn
@@ -26,8 +32,8 @@ build:
 build/uxn: $(COMMON) src/main.c | build
 	$(CC) $(CFLAGS) $(COMMON) src/main.c -o $@ $(LDFLAGS)
 
-build/test_uxn: $(COMMON) tests/test_main.c | build
-	$(CC) $(CFLAGS) $(COMMON) tests/test_main.c -o $@
+build/test_uxn: $(COMMON) $(TESTS) tests/test_cases.h | build
+	$(CC) $(CFLAGS) $(COMMON) $(TESTS) -o $@
 
 test: build/test_uxn
 	./build/test_uxn
