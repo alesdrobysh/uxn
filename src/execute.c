@@ -50,6 +50,80 @@ static uint16_t binary(uint8_t op_base, uint16_t a, uint16_t b) {
     }
 }
 
+static void execute_binary_op(UxnStack * stack, DecodedOpcode op) {
+    uint8_t saved_pointer = stack->pointer;
+
+    uint16_t b = stack_pop(stack, op.short_mode);
+    uint16_t a = stack_pop(stack, op.short_mode);
+
+    restore_if_keep(stack, saved_pointer, op.keep_mode);
+    
+    uint16_t result = binary(op.base, a, b);
+
+    stack_push(stack, result, op.short_mode);
+}
+
+static void execute_stack_op(UxnStack *stack, DecodedOpcode op) {
+    uint8_t saved_pointer = stack->pointer;
+
+    switch (op.base)
+    {
+        case 0x02: { // POP
+            stack_pop(stack, op.short_mode);
+            restore_if_keep(stack, saved_pointer, op.keep_mode);
+            break;
+        } case 0x03: { // NIP
+            uint16_t value_to_keep = stack_pop(stack, op.short_mode);
+            stack_pop(stack, op.short_mode);
+
+            restore_if_keep(stack, saved_pointer, op.keep_mode);
+            
+            stack_push(stack, value_to_keep, op.short_mode);
+            break;
+        } case 0x04: { // SWP
+            uint16_t b = stack_pop(stack, op.short_mode);
+            uint16_t a = stack_pop(stack, op.short_mode);
+
+            restore_if_keep(stack, saved_pointer, op.keep_mode);
+        
+            stack_push(stack, b, op.short_mode);
+            stack_push(stack, a, op.short_mode);
+            break;
+        } case 0x05: { // ROT
+            uint16_t c = stack_pop(stack, op.short_mode);
+            uint16_t b = stack_pop(stack, op.short_mode);
+            uint16_t a = stack_pop(stack, op.short_mode);
+
+            restore_if_keep(stack, saved_pointer, op.keep_mode);
+        
+            stack_push(stack, b, op.short_mode);
+            stack_push(stack, c, op.short_mode);
+            stack_push(stack, a, op.short_mode);
+            break;
+        } case 0x06: { // DUP
+            uint16_t a = stack_pop(stack, op.short_mode);
+
+            restore_if_keep(stack, saved_pointer, op.keep_mode);
+        
+            stack_push(stack, a, op.short_mode);
+            stack_push(stack, a, op.short_mode);
+            break;
+        } case 0x07: { // OVR
+            uint16_t b = stack_pop(stack, op.short_mode);
+            uint16_t a = stack_pop(stack, op.short_mode);
+
+            restore_if_keep(stack, saved_pointer, op.keep_mode);
+        
+            stack_push(stack, a, op.short_mode);
+            stack_push(stack, b, op.short_mode);
+            stack_push(stack, a, op.short_mode);
+            break;
+        }
+        
+        default: assert(0);
+    }
+}
+
 UxnRunResult uxn_run(Uxn *vm, size_t max_steps) {
     for  (size_t i = 0; i < max_steps; i++)
     {
@@ -96,15 +170,10 @@ UxnRunResult uxn_run(Uxn *vm, size_t max_steps) {
                 uint16_t result = a + 1;
 
                 stack_push(stack, result, op.short_mode);
+            } else if (op.base >= 0x02 && op.base <= 0x07) {
+                execute_stack_op(stack, op);
             } else if (op.base >= 0x18 && op.base <= 0x1E) {
-                uint16_t b = stack_pop(stack, op.short_mode);
-                uint16_t a = stack_pop(stack, op.short_mode);
-
-                restore_if_keep(stack, saved_pointer, op.keep_mode);
-                
-                uint16_t result = binary(op.base, a, b);
-
-                stack_push(stack, result, op.short_mode);
+                execute_binary_op(stack, op);
             } else if (op.base == 0x1F) { // SFT
                 uint8_t control = stack_pop8(stack);
                 uint8_t high_nibble = control >> 4;

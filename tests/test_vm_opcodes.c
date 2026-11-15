@@ -1,9 +1,11 @@
 #include <assert.h>
 #include <stdint.h>
 #include <string.h>
+#include <stdio.h>
 #include "execute.h"
 
 typedef struct {
+    const char *name;
     uint8_t base;
     uint8_t input8[4];
     size_t input8_len;
@@ -16,17 +18,17 @@ typedef struct {
 } StackOpcodeCase;
 
 static const StackOpcodeCase stack_opcode_cases[] = {
-    {0x02, {0xA1}, 1, {0}, 0, {0x12, 0x34}, 2, {0}, 0},
-    {0x03, {0x11, 0x22}, 2, {0x22}, 1,
+    {"POP", 0x02, {0xA1}, 1, {0}, 0, {0x12, 0x34}, 2, {0}, 0},
+    {"NIP", 0x03, {0x11, 0x22}, 2, {0x22}, 1,
            {0x12, 0x34, 0x56, 0x78}, 4, {0x56, 0x78}, 2},
-    {0x04, {0x11, 0x22}, 2, {0x22, 0x11}, 2,
+    {"SWP", 0x04, {0x11, 0x22}, 2, {0x22, 0x11}, 2,
            {0x12, 0x34, 0x56, 0x78}, 4, {0x56, 0x78, 0x12, 0x34}, 4},
-    {0x05, {0x11, 0x22, 0x33}, 3, {0x22, 0x33, 0x11}, 3,
+    {"ROT", 0x05, {0x11, 0x22, 0x33}, 3, {0x22, 0x33, 0x11}, 3,
            {0x12, 0x34, 0x56, 0x78, 0x9A, 0xBC}, 6,
            {0x56, 0x78, 0x9A, 0xBC, 0x12, 0x34}, 6},
-    {0x06, {0xA1}, 1, {0xA1, 0xA1}, 2,
+    {"DUP", 0x06, {0xA1}, 1, {0xA1, 0xA1}, 2,
            {0x12, 0x34}, 2, {0x12, 0x34, 0x12, 0x34}, 4},
-    {0x07, {0x11, 0x22}, 2, {0x11, 0x22, 0x11}, 3,
+    {"OVR", 0x07, {0x11, 0x22}, 2, {0x11, 0x22, 0x11}, 3,
            {0x12, 0x34, 0x56, 0x78}, 4,
            {0x12, 0x34, 0x56, 0x78, 0x12, 0x34}, 6},
 };
@@ -67,7 +69,20 @@ static void run_stack_opcode_case(const StackOpcodeCase *tc, bool short_mode,
     memcpy(expected + expected_len, output, output_len);
     expected_len += output_len;
 
-    assert((size_t)target->pointer == expected_len);
+    if ((size_t)target->pointer != expected_len) {
+        fprintf(
+            stderr, 
+            "FAIL: %s\nShort mode: %d\nReturn mode: %d\nKeep mode: %d\nExpected stack pointer: %zu, actual: %d\n", 
+            tc->name,
+            short_mode,
+            return_mode,
+            keep_mode,
+            expected_len, 
+            target->pointer
+        );
+        abort();
+    }
+
     assert(memcmp(target->data, expected, expected_len) == 0);
     assert(other->pointer == 1 && other->data[0] == 0xA7);
     uxn_destroy(vm);
