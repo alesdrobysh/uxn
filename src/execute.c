@@ -35,9 +35,13 @@ static uint16_t fetch16(Uxn *vm) {
     return value;
 }
 
-static uint16_t binary(uint8_t op_base, uint16_t a, uint16_t b) {
+static uint16_t alu_op(uint8_t op_base, uint16_t a, uint16_t b) {
     switch (op_base)
     {
+        case 0x08: return a == b;
+        case 0x09: return a != b;
+        case 0x0A: return a > b;
+        case 0x0B: return a < b;
         case 0x18: return a + b;
         case 0x19: return a - b;
         case 0x1A: return (uint16_t)((uint32_t)a * b);
@@ -50,7 +54,7 @@ static uint16_t binary(uint8_t op_base, uint16_t a, uint16_t b) {
     }
 }
 
-static void execute_binary_op(UxnStack * stack, DecodedOpcode op) {
+static void execute_alu_op(UxnStack * stack, DecodedOpcode op) {
     uint8_t saved_pointer = stack->pointer;
 
     uint16_t b = stack_pop(stack, op.short_mode);
@@ -58,7 +62,7 @@ static void execute_binary_op(UxnStack * stack, DecodedOpcode op) {
 
     restore_if_keep(stack, saved_pointer, op.keep_mode);
     
-    uint16_t result = binary(op.base, a, b);
+    uint16_t result = alu_op(op.base, a, b);
 
     stack_push(stack, result, op.short_mode);
 }
@@ -172,8 +176,10 @@ UxnRunResult uxn_run(Uxn *vm, size_t max_steps) {
                 stack_push(stack, result, op.short_mode);
             } else if (op.base >= 0x02 && op.base <= 0x07) {
                 execute_stack_op(stack, op);
+            } else if (op.base >= 0x08 && op.base <= 0x0B) {
+                execute_alu_op(stack, op);
             } else if (op.base >= 0x18 && op.base <= 0x1E) {
-                execute_binary_op(stack, op);
+                execute_alu_op(stack, op);
             } else if (op.base == 0x1F) { // SFT
                 uint8_t control = stack_pop8(stack);
                 uint8_t high_nibble = control >> 4;

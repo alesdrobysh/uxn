@@ -10,6 +10,7 @@ int main(void) {
         test_run_jsi() ||
         test_arithmetic() ||
         test_stack_opcodes() ||
+        test_comparison_opcodes() ||
         test_decode_opcode();
 
     puts("All tests passed!");

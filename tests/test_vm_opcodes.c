@@ -99,6 +99,7 @@ int test_stack_opcodes(void) {
 }
 
 typedef struct {
+    const char *name;
     uint8_t base;
     uint8_t a8;
     uint8_t b8;
@@ -109,14 +110,14 @@ typedef struct {
 } CompareCase;
 
 static const CompareCase comparison_cases[] = {
-    {0x08, 0x34, 0x34, 1, 0x1234, 0x1234, 1}, /* EQU */
-    {0x08, 0x34, 0x35, 0, 0x1234, 0x1235, 0},
-    {0x09, 0x34, 0x35, 1, 0x1234, 0x1235, 1}, /* NEQ */
-    {0x09, 0x34, 0x34, 0, 0x1234, 0x1234, 0},
-    {0x0A, 0x90, 0x11, 1, 0x9000, 0x1100, 1}, /* GTH */
-    {0x0A, 0x11, 0x90, 0, 0x1100, 0x9000, 0},
-    {0x0B, 0x11, 0x90, 1, 0x1100, 0x9000, 1}, /* LTH */
-    {0x0B, 0x90, 0x11, 0, 0x9000, 0x1100, 0},
+    {"EQU 1", 0x08, 0x34, 0x34, 1, 0x1234, 0x1234, 1},
+    {"EQU 0", 0x08, 0x34, 0x35, 0, 0x1234, 0x1235, 0},
+    {"NEQ 1", 0x09, 0x34, 0x35, 1, 0x1234, 0x1235, 1},
+    {"NEQ 0", 0x09, 0x34, 0x34, 0, 0x1234, 0x1234, 0},
+    {"GTH 1", 0x0A, 0x90, 0x11, 1, 0x9000, 0x1100, 1},
+    {"GTH 0", 0x0A, 0x11, 0x90, 0, 0x1100, 0x9000, 0},
+    {"LTH 1", 0x0B, 0x11, 0x90, 1, 0x1100, 0x9000, 1},
+    {"LTH0", 0x0B, 0x90, 0x11, 0, 0x9000, 0x1100, 0},
 };
 
 int test_comparison_opcodes(void) {
@@ -172,7 +173,19 @@ int test_comparison_opcodes(void) {
             }
             memcpy(expected + expected_len, expected_result, result_len);
             expected_len += result_len;
-            assert((size_t)target->pointer == expected_len);
+            if ((size_t)target->pointer != expected_len) {
+                fprintf(
+                    stderr, 
+                    "FAIL: %s\nShort mode: %d\nReturn mode: %d\nKeep mode: %d\nExpected stack pointer: %zu, actual: %d\n", 
+                    tc->name,
+                    short_mode,
+                    return_mode,
+                    keep_mode,
+                    expected_len, 
+                    target->pointer
+                );
+                abort();
+            }
             assert(memcmp(target->data, expected, expected_len) == 0);
             assert(other->pointer == 1 && other->data[0] == 0xA7);
             uxn_destroy(vm);
