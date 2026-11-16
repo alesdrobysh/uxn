@@ -11,6 +11,9 @@ int main(void) {
         test_arithmetic() ||
         test_stack_opcodes() ||
         test_comparison_opcodes() ||
+        test_control_opcodes() ||
+        test_immediate_control_and_literal_opcodes() ||
+        test_decode_opcode_exhaustive() ||
         test_decode_opcode();
 
     puts("All tests passed!");

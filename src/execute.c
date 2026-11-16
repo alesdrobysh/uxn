@@ -7,6 +7,12 @@ static inline void restore_if_keep(UxnStack *stack, uint8_t saved, bool keep) {
     if (keep) stack->pointer = saved;
 }
 
+static uint16_t sign_extend8(uint8_t value) {
+    return value < 0x80
+        ? value
+        : (uint16_t)(value | 0xFF00);
+}
+
 static void stack_push(UxnStack *stack, uint16_t value, bool short_mode) {
     if (short_mode) {
         stack_push16(stack, value);
@@ -164,6 +170,7 @@ UxnRunResult uxn_run(Uxn *vm, size_t max_steps) {
             return UXN_RUN_BRK;
         } else if (op.kind == OP_STANDARD) {
             UxnStack * stack = op.return_mode ? &vm->ret : &vm->working;
+            UxnStack * other_stack = op.return_mode ? &vm->working : &vm->ret;
             uint8_t saved_pointer = stack->pointer;
 
             if (op.base == 0x01) { // INC
@@ -192,6 +199,41 @@ UxnRunResult uxn_run(Uxn *vm, size_t max_steps) {
                 uint16_t result = (uint16_t)((value >> low_nibble) << high_nibble);
 
                 stack_push(stack, result, op.short_mode);
+            } else if (op.base == 0x0C) { // JMP
+                uint16_t address = stack_pop(stack, op.short_mode);
+                restore_if_keep(stack, saved_pointer, op.keep_mode);
+
+                if (op.short_mode) {
+                    vm->pc = address;
+                } else {
+                    vm->pc += sign_extend8((uint8_t)address);
+                }
+            } else if (op.base == 0x0D) { // JCN
+                uint16_t address = stack_pop(stack, op.short_mode);
+                uint16_t condition = stack_pop(stack, false);
+                restore_if_keep(stack, saved_pointer, op.keep_mode);
+
+                if (condition != 0) {
+                    if (op.short_mode) {
+                        vm->pc = address;
+                    } else {
+                        vm->pc += sign_extend8((uint8_t)address);
+                    }
+                }
+            } else if (op.base == 0x0E) { // JSR
+                uint16_t address = stack_pop(stack, op.short_mode);
+                restore_if_keep(stack, saved_pointer, op.keep_mode);
+                stack_push(other_stack, vm->pc, true);
+
+                if (op.short_mode) {
+                    vm->pc = address;
+                } else {
+                    vm->pc += sign_extend8((uint8_t)address);
+                }
+            } else if (op.base == 0x0F) { // STH
+                uint16_t value = stack_pop(stack, op.short_mode);
+                restore_if_keep(stack, saved_pointer, op.keep_mode);
+                stack_push(other_stack, value, op.short_mode);
             } else {
                 vm->pc--;
                 return UXN_RUN_UNSUPPORTED;

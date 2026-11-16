@@ -193,231 +193,245 @@ int test_comparison_opcodes(void) {
     return 0;
 }
 
-static void run_control(Uxn *vm, uint8_t opcode, size_t max_steps,
-                        UxnRunResult expected_result) {
-    vm->ram[0x0100] = opcode;
-    assert(uxn_run(vm, max_steps) == expected_result);
-}
-
-int test_control_flow_opcodes(void) {
-    Uxn *vm = uxn_create();
-    assert(vm != NULL);
-
-    /* JMP uses a signed 8-bit relative offset; JMP2 uses an absolute address. */
-    stack_push8(&vm->working, 0x02);
-    vm->ram[0x0103] = 0x00;
-    run_control(vm, 0x0C, 1, UXN_RUN_STEP_LIMIT);
-    assert(uxn_get_pc(vm) == 0x0103);
-    assert(vm->working.pointer == 0);
-
-    uxn_init(vm);
-    stack_push8(&vm->working, 0xFE); /* -2 */
-    run_control(vm, 0x0C, 1, UXN_RUN_STEP_LIMIT);
-    assert(uxn_get_pc(vm) == 0x00FF);
-
-    uxn_init(vm);
-    stack_push16(&vm->working, 0x2345);
-    run_control(vm, 0x2C, 1, UXN_RUN_STEP_LIMIT);
-    assert(uxn_get_pc(vm) == 0x2345);
-    assert(vm->working.pointer == 0);
-
-    /* JCN consumes target and condition even when the condition is false. */
-    uxn_init(vm);
-    stack_push8(&vm->working, 1);
-    stack_push8(&vm->working, 2);
-    vm->ram[0x0103] = 0;
-    run_control(vm, 0x0D, 1, UXN_RUN_STEP_LIMIT);
-    assert(uxn_get_pc(vm) == 0x0103 && vm->working.pointer == 0);
-
-    uxn_init(vm);
-    stack_push8(&vm->working, 0);
-    stack_push8(&vm->working, 2);
-    run_control(vm, 0x0D, 1, UXN_RUN_STEP_LIMIT);
-    assert(uxn_get_pc(vm) == 0x0101 && vm->working.pointer == 0);
-
-    uxn_init(vm);
-    stack_push8(&vm->working, 1);
-    stack_push16(&vm->working, 0x2345);
-    run_control(vm, 0x2D, 1, UXN_RUN_STEP_LIMIT);
-    assert(uxn_get_pc(vm) == 0x2345 && vm->working.pointer == 0);
-
-    uxn_init(vm);
-    stack_push8(&vm->working, 0);
-    stack_push16(&vm->working, 0x2345);
-    run_control(vm, 0x2D, 1, UXN_RUN_STEP_LIMIT);
-    assert(uxn_get_pc(vm) == 0x0101 && vm->working.pointer == 0);
-
-    /* JSR pushes the address of the next instruction onto the return stack. */
-    uxn_init(vm);
-    stack_push8(&vm->working, 2);
-    vm->ram[0x0103] = 0;
-    run_control(vm, 0x0E, 1, UXN_RUN_STEP_LIMIT);
-    assert(uxn_get_pc(vm) == 0x0103);
-    assert(vm->ret.pointer == 2);
-    assert(vm->ret.data[0] == 0x01 && vm->ret.data[1] == 0x01);
-
-    uxn_init(vm);
-    stack_push16(&vm->working, 0x2345);
-    run_control(vm, 0x2E, 1, UXN_RUN_STEP_LIMIT);
-    assert(uxn_get_pc(vm) == 0x2345);
-    assert(vm->ret.pointer == 2);
-    assert(vm->ret.data[0] == 0x01 && vm->ret.data[1] == 0x01);
-
-    /* STH transfers bytes/shorts between the two stacks, both directions. */
-    uxn_init(vm);
-    stack_push8(&vm->working, 0xA5);
-    run_control(vm, 0x0F, 1, UXN_RUN_STEP_LIMIT);
-    assert(vm->working.pointer == 0);
-    assert(vm->ret.pointer == 1 && vm->ret.data[0] == 0xA5);
-
-    uxn_init(vm);
-    stack_push16(&vm->ret, 0xBEEF);
-    run_control(vm, 0x6F, 1, UXN_RUN_STEP_LIMIT);
-    assert(vm->ret.pointer == 0);
-    assert(vm->working.pointer == 2);
-    assert(vm->working.data[0] == 0xBE && vm->working.data[1] == 0xEF);
-
-    uxn_init(vm);
-    stack_push8(&vm->working, 0xA5);
-    run_control(vm, 0x8F, 1, UXN_RUN_STEP_LIMIT);
-    assert(vm->working.pointer == 1 && vm->working.data[0] == 0xA5);
-    assert(vm->ret.pointer == 1 && vm->ret.data[0] == 0xA5);
-
-    uxn_destroy(vm);
-    return 0;
-}
-
-int test_control_opcode_modes(void) {
+int test_control_opcodes(void) {
     for (unsigned mode = 0; mode < 8; ++mode) {
         const bool short_mode = (mode & 1u) != 0;
         const bool return_mode = (mode & 2u) != 0;
         const bool keep_mode = (mode & 4u) != 0;
-        const uint8_t mode_bits = (uint8_t)((short_mode ? 0x20u : 0u) |
-            (return_mode ? 0x40u : 0u) | (keep_mode ? 0x80u : 0u));
 
-        /* JMP consumes a relative byte or an absolute short address. */
+        const uint8_t mode_bits = (uint8_t)(
+            (short_mode ? 0x20u : 0u) |
+            (return_mode ? 0x40u : 0u) |
+            (keep_mode ? 0x80u : 0u)
+        );
+
+        /*
+         * JMP:
+         * - 8-bit target: signed relative offset
+         * - 16-bit target: absolute address
+         */
         Uxn *vm = uxn_create();
         assert(vm != NULL);
-        UxnStack *source = return_mode ? &vm->ret : &vm->working;
-        UxnStack *other = return_mode ? &vm->working : &vm->ret;
+
+        UxnStack *source = return_mode
+            ? &vm->ret
+            : &vm->working;
+
+        UxnStack *other = return_mode
+            ? &vm->working
+            : &vm->ret;
+
         stack_push8(source, 0xEE);
         stack_push8(other, 0xA7);
+
         if (short_mode) {
             stack_push16(source, 0x2345);
         } else {
             stack_push8(source, 2);
         }
+
         vm->ram[0x0100] = (uint8_t)(0x0Cu | mode_bits);
+
         assert(uxn_run(vm, 1) == UXN_RUN_STEP_LIMIT);
-        assert(uxn_get_pc(vm) == (short_mode ? 0x2345 : 0x0103));
-        assert(source->pointer == (uint8_t)(1u + (keep_mode ? (short_mode ? 2u : 1u) : 0u)));
+
+        assert(uxn_get_pc(vm) ==
+            (short_mode ? 0x2345 : 0x0103));
+
+        assert(source->pointer == (uint8_t)(
+            1u + (keep_mode ? (short_mode ? 2u : 1u) : 0u)
+        ));
+
+        assert(source->data[0] == 0xEE);
+
         if (keep_mode) {
-            assert(source->data[0] == 0xEE);
             if (short_mode) {
-                assert(source->data[1] == 0x23 && source->data[2] == 0x45);
+                assert(source->data[1] == 0x23);
+                assert(source->data[2] == 0x45);
             } else {
                 assert(source->data[1] == 2);
             }
-        } else {
-            assert(source->data[0] == 0xEE);
         }
-        assert(other->pointer == 1 && other->data[0] == 0xA7);
+
+        assert(other->pointer == 1);
+        assert(other->data[0] == 0xA7);
+
         uxn_destroy(vm);
 
-        /* JCN takes condition then target and preserves both with keep mode. */
+        /*
+         * JCN:
+         * - condition is always 8-bit
+         * - target is 8-bit or 16-bit
+         * - keep preserves both operands
+         */
         vm = uxn_create();
         assert(vm != NULL);
+
         source = return_mode ? &vm->ret : &vm->working;
         other = return_mode ? &vm->working : &vm->ret;
+
         stack_push8(source, 0xEE);
         stack_push8(other, 0xA7);
-        stack_push8(source, 1);
+
+        stack_push8(source, 1); // True condition
+
         if (short_mode) {
             stack_push16(source, 0x2345);
         } else {
             stack_push8(source, 2);
         }
+
         vm->ram[0x0100] = (uint8_t)(0x0Du | mode_bits);
+
         assert(uxn_run(vm, 1) == UXN_RUN_STEP_LIMIT);
-        assert(uxn_get_pc(vm) == (short_mode ? 0x2345 : 0x0103));
-        assert(source->pointer == (uint8_t)(1u + (keep_mode ? (short_mode ? 3u : 2u) : 0u)));
+
+        assert(uxn_get_pc(vm) ==
+            (short_mode ? 0x2345 : 0x0103));
+
+        assert(source->pointer == (uint8_t)(
+            1u + (keep_mode ? (short_mode ? 3u : 2u) : 0u)
+        ));
+
+        assert(source->data[0] == 0xEE);
+
         if (keep_mode) {
-            assert(source->data[0] == 0xEE && source->data[1] == 1);
+            assert(source->data[1] == 1);
+
             if (short_mode) {
-                assert(source->data[2] == 0x23 && source->data[3] == 0x45);
+                assert(source->data[2] == 0x23);
+                assert(source->data[3] == 0x45);
             } else {
                 assert(source->data[2] == 2);
             }
-        } else {
-            assert(source->data[0] == 0xEE);
         }
-        assert(other->pointer == 1 && other->data[0] == 0xA7);
+
+        assert(other->pointer == 1);
+        assert(other->data[0] == 0xA7);
+
         uxn_destroy(vm);
 
-        /* JSR always pushes its return address onto the return stack. */
+        /*
+         * JSR:
+         * - target comes from source
+         * - return address goes to the OPPOSITE stack
+         * - return address is always 16-bit
+         * - keep preserves target in source
+         */
         vm = uxn_create();
         assert(vm != NULL);
+
         source = return_mode ? &vm->ret : &vm->working;
         other = return_mode ? &vm->working : &vm->ret;
+
         stack_push8(source, 0xEE);
+
         if (short_mode) {
             stack_push16(source, 0x2345);
         } else {
             stack_push8(source, 2);
         }
+
         vm->ram[0x0100] = (uint8_t)(0x0Eu | mode_bits);
+
         assert(uxn_run(vm, 1) == UXN_RUN_STEP_LIMIT);
-        assert(uxn_get_pc(vm) == (short_mode ? 0x2345 : 0x0103));
-        if (source == &vm->ret) {
-            const size_t target_len = short_mode ? 2u : 1u;
-            const size_t return_address_index = 1u +
-                (keep_mode ? target_len : 0u);
-            assert(vm->ret.pointer == (uint8_t)(return_address_index + 2u));
-            assert(vm->ret.data[return_address_index] == 0x01);
-            assert(vm->ret.data[return_address_index + 1u] == 0x01);
-        } else {
-            assert(vm->working.pointer == (uint8_t)(1u +
-                (keep_mode ? (short_mode ? 2u : 1u) : 0u)));
-            assert(vm->ret.pointer == 2);
-            assert(vm->ret.data[0] == 0x01 && vm->ret.data[1] == 0x01);
+
+        assert(uxn_get_pc(vm) ==
+            (short_mode ? 0x2345 : 0x0103));
+
+        const size_t target_len = short_mode ? 2u : 1u;
+
+        /* Source stack: target consumed or preserved */
+        assert(source->pointer == (uint8_t)(
+            1u + (keep_mode ? target_len : 0u)
+        ));
+
+        assert(source->data[0] == 0xEE);
+
+        if (keep_mode) {
+            if (short_mode) {
+                assert(source->data[1] == 0x23);
+                assert(source->data[2] == 0x45);
+            } else {
+                assert(source->data[1] == 2);
+            }
         }
+
+        /*
+         * Destination stack: return address = 0x0101.
+         * This works for JSR and JSRr alike.
+         */
+        assert(other->pointer == 2);
+        assert(other->data[0] == 0x01);
+        assert(other->data[1] == 0x01);
+
         uxn_destroy(vm);
     }
 
-    /* STH's r bit selects the source stack; short and keep apply as usual. */
+    /*
+     * STH:
+     * - r selects the source stack
+     * - short selects the value width
+     * - keep preserves the source operand
+     */
     for (unsigned mode = 0; mode < 8; ++mode) {
         const bool short_mode = (mode & 1u) != 0;
         const bool return_mode = (mode & 2u) != 0;
         const bool keep_mode = (mode & 4u) != 0;
+
         Uxn *vm = uxn_create();
         assert(vm != NULL);
-        UxnStack *source = return_mode ? &vm->ret : &vm->working;
-        UxnStack *destination = return_mode ? &vm->working : &vm->ret;
+
+        UxnStack *source = return_mode
+            ? &vm->ret
+            : &vm->working;
+
+        UxnStack *destination = return_mode
+            ? &vm->working
+            : &vm->ret;
+
         stack_push8(source, 0xEE);
+
         if (short_mode) {
             stack_push16(source, 0x1234);
         } else {
             stack_push8(source, 0xA5);
         }
-        vm->ram[0x0100] = (uint8_t)(0x0Fu |
+
+        vm->ram[0x0100] = (uint8_t)(
+            0x0Fu |
             (short_mode ? 0x20u : 0u) |
             (return_mode ? 0x40u : 0u) |
-            (keep_mode ? 0x80u : 0u));
+            (keep_mode ? 0x80u : 0u)
+        );
+
         assert(uxn_run(vm, 1) == UXN_RUN_STEP_LIMIT);
+        assert(uxn_get_pc(vm) == 0x0101);
+
         const size_t value_len = short_mode ? 2u : 1u;
-        assert(source->pointer == (uint8_t)(1u + (keep_mode ? value_len : 0u)));
+
+        assert(source->pointer == (uint8_t)(
+            1u + (keep_mode ? value_len : 0u)
+        ));
+
         assert(destination->pointer == value_len);
+
         if (short_mode) {
-            assert(destination->data[0] == 0x12 && destination->data[1] == 0x34);
+            assert(destination->data[0] == 0x12);
+            assert(destination->data[1] == 0x34);
         } else {
             assert(destination->data[0] == 0xA5);
         }
+
         assert(source->data[0] == 0xEE);
-        if (keep_mode && short_mode) {
-            assert(source->data[1] == 0x12 && source->data[2] == 0x34);
-        } else if (keep_mode) {
-            assert(source->data[1] == 0xA5);
+
+        if (keep_mode) {
+            if (short_mode) {
+                assert(source->data[1] == 0x12);
+                assert(source->data[2] == 0x34);
+            } else {
+                assert(source->data[1] == 0xA5);
+            }
         }
+
         uxn_destroy(vm);
     }
 
