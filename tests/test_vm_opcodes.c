@@ -144,9 +144,8 @@ int test_comparison_opcodes(void) {
                 inputs[2] = (uint8_t)(tc->b16 >> 8);
                 inputs[3] = (uint8_t)tc->b16;
                 input_len = 4;
-                expected_result[0] = 0;
-                expected_result[1] = (uint8_t)tc->result16;
-                result_len = 2;
+                expected_result[0] = (uint8_t)tc->result16;
+                result_len = 1;
             } else {
                 inputs[0] = tc->a8;
                 inputs[1] = tc->b8;

@@ -63,8 +63,8 @@ static void execute_alu_op(UxnStack * stack, DecodedOpcode op) {
     restore_if_keep(stack, saved_pointer, op.keep_mode);
     
     uint16_t result = alu_op(op.base, a, b);
-
-    stack_push(stack, result, op.short_mode);
+    bool comparison = op.base >= 0x08 && op.base <= 0x0B;
+    stack_push(stack, result, op.short_mode && !comparison);
 }
 
 static void execute_stack_op(UxnStack *stack, DecodedOpcode op) {
